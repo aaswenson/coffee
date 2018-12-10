@@ -57,18 +57,27 @@ class krusty():
     
     def reactor(self):
         self.volume = float(1940)           # Fuel volume [cc]
+        N_ch = 8                            # Number of coolant channels
+        D_ch = 1.07                         # ID of heat pipe
+        A_ch = np.pi*D_ch**2/4              # cross-sectional area of heat pipe
+        self.A_chs = N_ch * A_ch            # Total cross-sect. area of heat pipes
         self.Tf0 = float(20)                # Initial Fuel Temperature [C]
-        dens = self.dens(self.Tf0)          # [g/cc]
-        cp = self.cp(self.Tf0)              # [J/g-C]
+        dens_f = self.dens(self.Tf0)        # [g/cc]
+        cp_f = self.cp(self.Tf0)            # [J/g-C]
         # # Thermal Capacity
-        self.C_th = dens*cp*self.volume     # [g/cc]*[J/g-C]*[cc] = [J/C]
+        self.C_th = dens_f*cp_f*self.volume # [g/cc]*[J/g-C]*[cc] = [J/C]
+        r_fi = 0.02                         # inner radius, fuel [m]
+        r_fo = 0.055                        # outter radius, fuel [m]
+        hgt = 0.25                          # Reactor height [m]
+        self.R_f0 = np.log(r_fo/r_fi)/(2*np.pi*hgt) # resitance term
 
     def RungeKutta4(self):        
-        Ttime = float(170)                  # Simulation Time
+        Ttime = float(600)                  # Simulation Time
         dt = 0.01                           # Time step size
         tsec = np.arange(0, Ttime+dt, dt)   # time vector
         rho = [self.rho0]                   # value vectors
         Tf = [self.Tf0]
+        Tc = [self.Tf0]
         n = [self.n0]
         c = self.c0
         order = 4                           # order of approach
@@ -155,14 +164,6 @@ class krusty():
             for i in range(self.groups):
                 c[i].append(clast[i]+dt/2*(self.fci(i, n[-1], clast[i],
                                                     rho[-1]) + self.fci(i, n_pred, c_pred[i], rho[-1])))
-        print('done')
-        tmin = np.divide(tsec, float(60))
-        # plt.plot(tmin,n,label=rho_cost)
-        # plt.yscale('log')
-        # plt.ylim(0,1e8)
-        n = 0
-        # plt.legend()
-        # plt.show()
 
     def fn(self, n, c, rho):
         """ Neutron derivative function """
@@ -180,15 +181,21 @@ class krusty():
         return self.beta_i[group] / self.L * n - self.lam[group] * c
 
     def fTemp(self, n, T):
+        """ Fuel Temperautre function """
         # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
-        # self.resistance
-        R = np.log(5.5/2)/(2*np.pi*.25*15) # + 1/(400*100)
-        return self.Kf*n - 0.001 #1/R
+        P_fuel = self.Kf * n                # Reactor power
+        deltaT = T/20                         # Temp. diff. from fuel to coolant(bulk)
+        h_bar = 2000                         # [W/m^2-K]
+        R_f = self.R_f0/self.kcond(T)
+        R_conv = 1/(h_bar*self.A_chs)
+        R_total = R_f + R_conv
+        Q_out = deltaT/R_total
+        return P_fuel - Q_out
 
     def frho(self,rho0,T,n):
         """ Reactivity with Temperature Feedback """
         # return float(rho0 + self.RTC(T)*(T-T0))
-        rho_new =  float(rho0 + self.RTC(T)*self.Kf*n)
+        rho_new =  float(rho0 + self.RTC(T)*self.Kf*(n-self.n0))
         print(T,'\t',rho_new)
         return rho_new
 
