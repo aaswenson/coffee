@@ -70,15 +70,17 @@ class krusty():
         # Average neutron speed [m/s]       
         self.v_n = np.sqrt(2*self.E_neutron/self.mass_n)*100    # neutron speed [cm/s]
         self.sigma_F = float(2e-24)                             # fast fission xs [cm^2]
-        self.H0 = self.v_n * self.Efis * self.sigma_F * self.N_235 /self.volume   # [cm/s * J/fis * cm^2 * at/cm^3]
-        self.H1 = 17.6 * 36 * self.volume
+        self.H0 = self.v_n * self.Efis * self.sigma_F * self.N_235 # [cm/s * J/fis * cm^2 * at/cm^3] = [W]
+        self.H1 = 17.6 * 36 * self.volume                           # thermal capacity [g/cc * J/g-C]
         self.k_factor = self.H1 * self.H0
+        ntoP = self.Efis/self.nu_235            # [J/n]
+        self.k_factor = ntoP/self.H1
 
     def RungeKutta4(self):
         rho_cost = float(0.6)               # Initial step reactivity cost [$]
         rho0 = rho_cost * self.beta         # Reactivity [dk/k]
         Tf0 = float(20)                     # Initial Fuel Temperature [C]
-        Ttime = float(60*10)                # Simulation Time
+        Ttime = float(170)                # Simulation Time
         dt = 0.01                           # Time step size
         tsec = np.arange(0, Ttime+dt, dt)   # time vector
         rho = [rho0]                        # value vectors
@@ -94,6 +96,7 @@ class krusty():
             c_j0 = [x[-1] for x in c]
             T_j0 = Tf[-1]
             rho_j0 = rho[-1]
+            # print(t,n_j0,T_j0,rho_j0)
             rho_j = self.frho(rho0,T_j0,n_j0)
             if rho_j <= float(0):
                 rho_j = 0
@@ -215,12 +218,15 @@ class krusty():
         return self.beta_i[group] / self.L * n - self.lam[group] * c
 
     def fTemp(self, n, T):
-        return (self.k_factor*n/(self.volume*self.dens(T)*self.cp(T)))
+        # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
+        return self.k_factor*n
 
     def frho(self,rho0,T,n):
     
         # return float(rho0 + self.RTC(T)*(T-T0))
-        return float(rho0 + self.beta*self.RTC(T)*self.k_factor*n)
+        rho_new =  float(rho0 + self.beta*self.RTC(T)*self.k_factor*n)
+        print(rho_new)
+        return rho_new
 
     def RTC(self, T):
         # """ Third-Order Fit to Fuel Temperature Reactivity Coefficient (INSTANTANEOUS)"""
