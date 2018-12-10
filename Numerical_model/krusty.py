@@ -5,90 +5,72 @@ import numpy as np
 import scipy
 import time
 import matplotlib.pyplot as plt
+from units import *
+
 """
 PRKE Finite Difference for KRUSTY KRAB REACTOR
 """
-__author__ = "Daniel Cech"
-
 
 class krusty():
     def __init__(self):
-        self.Tf = []
-        self.rho = []
-        # TODO: find better values for L and nO
-        self.L = float(2.4e-5)
-        self.n0 = float(1)
-        self.n = [self.n0]
-
-        # D. Hetrick, Table 1-2, p.11
-        # Decay constant, lambda [sec^-1]
+        self.n0 = 1                     # initial neutron population
+        enrich = 0.93155                # U-235 enrichment
+        Moly_wo = 0.075                 # Moly weight fraction [wt%]
+        rho_cost = 0.60                 # Initial step reactivity cost [$]
+        self.reactor()                  # set Physical parameters of system
+        self.nuclear_data(rho_cost)     # set 6-group data
+        self.N235 = self.num_dens(enrich, Moly_wo)     # set U235 number density
+    
+    def nuclear_data(self,rho=0.6):
+        # Fission parameters
+        self.L = float(2.4e-5)                  # mean neutron lifetime
+        self.nu_235 = float(2.57)               # Neutrons per fission, U-235 Fast Fission
+        self.E_fission = float(185) * unit['MeV_J']
+        self.sigma_F = 2 * unit['b_cm']         # Fission cross-section [cm^2]
+        self.n_W = self.E_fission/self.nu_235   # conversion factor from neutron to watts
+        # Decay constant, lambda [sec^-1] (D. Hetrick, Table 1-2, p.11)
         self.lam = [0.0127, 0.0317, 0.115, 0.311, 1.40, 3.87]
-        # Neutrons per fission, U-235 Fast Fission, nu
-        self.nu_235 = float(2.57)
         # Delayed Neutron Yield [n/fission]
         self.beta_nu = [0.00063, 0.00351, 0.00310, 0.00672, 0.00211, 0.00043]
         # Delayed Neutron Fractions
         self.beta_i = np.divide(self.beta_nu, self.nu_235)
-        # Total Beta Fraction
-        self.beta = sum(self.beta_i)
-        # Number of delayed groups
-        self.groups = len(self.lam)
+        self.beta = sum(self.beta_i)            # Total Beta Fraction
+        self.groups = len(self.lam)             # Number of delayed groups
         # Initial Precursor Vectors
-        self.c = [[beta*self.n0/(self.L*lam)]
-                  for beta, lam in zip(self.beta_i, self.lam)]
+        self.c0 = [[beta*self.n0/(self.L*lam)] for beta, lam in zip(self.beta_i, self.lam)]
+        self.rho0 = rho*self.beta
+        # # K-factor
+        self.Kf = self.n_W/self.C_th            # k-factor
 
-    def number_density(self):
+        # # Neutron speed
+        # E_n = 0.5 * unit['MeV_J']   # averege neutron  energy ~ 500 keV
+        # v_n = np.sqrt(2*E_n/unit['mass_n'])*100 # neutron speed [cm/s]
+
+    def num_dens(self, enr=0.93155, w_Mo = 0.075):
         """ return number density of U-235"""
-        enr = 0.93155           # U-235 enrichment
-        w_Mo = 0.075            # weight fraction of Mo in U-Mo
-        M235 = 235.04           # M U-235
-        M238 = 238.05           # M U-238
-        M_Mo = 95.94            # M nat-Mo
-        M_U = (enr/M235 + (1-enr)/M238)**-1 # adjusted M Uranium
-        at_Mo = (w_Mo/M_Mo)/(w_Mo/M_Mo + (1-w_Mo)/M_U)  # atomic fraction Mo
+        M_U = (enr/amass['U235'] + (1-enr)/amass['U238'])**-1 # adjusted M Uranium
+        at_Mo = (w_Mo/amass['Mo'])/(w_Mo/amass['Mo'] + (1-w_Mo)/M_U)  # atomic fraction Mo
         at_U = 1-at_Mo          # atomic fraction U
-        M_UMo = M_U*at_U + M_Mo*at_Mo
-        rho = 17.6; rho_U = 16.3
-        return enr*self.Av/M235 * rho * M_U/M_UMo
-
-    def setInputs(self):
-        self.MeV_J = float(1.6021892e-13)       # Joule/MeV conversion
-        self.boltz = float(1.380662e-23)        # Boltzmann constant,k [J/K]
-        self.mass_n = float(1.674929e-27)       # mass of neutron [kg]
-        self.Av = float(6.0225e23)
-        self.C_K = float(273.15)
-        self.N_235 = self.number_density()      # U235 number density [at/cc]
-        Power_rated = float(5e3)                # Rated thermal power
-        Tf_ave = float(800)                     # deg C 
-        Tc_ave = float(750)                     # deg C
-        M_235 = (27.5e3)                        # grams U-235
-        phi_ave = float(9.3e11)                 # Core Average Neutron Flux
-        nom_Wcc = float(1.6)                # Nominal Power density
+        M_UMo = M_U*at_U + amass['Mo']*at_Mo   # adjusted M for U-Mo mixture
+        rho = 17.6              # nominal density 
+        return enr*unit['Av']/amass['U235'] * rho * M_U/M_UMo
+    
+    def reactor(self):
         self.volume = float(1940)           # Fuel volume [cc]
-        self.Efis = float(190)*self.MeV_J   # Recoverable energy from fission [MeV] --> [J]
-        self.E_neutron = float(0.5)*self.MeV_J         # Average neutron energy is 500 keV
-        # Average neutron speed [m/s]       
-        self.v_n = np.sqrt(2*self.E_neutron/self.mass_n)*100    # neutron speed [cm/s]
-        self.sigma_F = float(2e-24)                             # fast fission xs [cm^2]
-        self.H0 = self.v_n * self.Efis * self.sigma_F * self.N_235 # [cm/s * J/fis * cm^2 * at/cm^3] = [W]
-        self.H1 = 17.6 * 36 * self.volume                           # thermal capacity [g/cc * J/g-C]
-        self.k_factor = self.H1 * self.H0
-        ntoP = self.Efis/self.nu_235            # [J/n]
-        self.k_factor = ntoP/self.H1
+        self.Tf0 = float(20)                # Initial Fuel Temperature [C]
+        dens = self.dens(self.Tf0)          # [g/cc]
+        cp = self.cp(self.Tf0)              # [J/g-C]
+        # # Thermal Capacity
+        self.C_th = dens*cp*self.volume     # [g/cc]*[J/g-C]*[cc] = [J/C]
 
-    def RungeKutta4(self):
-        rho_cost = float(0.6)               # Initial step reactivity cost [$]
-        rho0 = rho_cost * self.beta         # Reactivity [dk/k]
-        Tf0 = float(20)                     # Initial Fuel Temperature [C]
-        Ttime = float(170)                # Simulation Time
+    def RungeKutta4(self):        
+        Ttime = float(170)                  # Simulation Time
         dt = 0.01                           # Time step size
         tsec = np.arange(0, Ttime+dt, dt)   # time vector
-        rho = [rho0]                        # value vectors
-        Tf = [Tf0]
-        n = []
-        c = []
+        rho = [self.rho0]                   # value vectors
+        Tf = [self.Tf0]
         n = [self.n0]
-        c = self.c
+        c = self.c0
         order = 4                           # order of approach
         for ind, t in enumerate(tsec[1:]):
             # initial values
@@ -97,7 +79,7 @@ class krusty():
             T_j0 = Tf[-1]
             rho_j0 = rho[-1]
             # print(t,n_j0,T_j0,rho_j0)
-            rho_j = self.frho(rho0,T_j0,n_j0)
+            rho_j = self.frho(rho[0],T_j0,n_j0)
             if rho_j <= float(0):
                 rho_j = 0
             # first derivative
@@ -133,34 +115,14 @@ class krusty():
             c_j4 = [cj + (a + 2*b + 2*c + d)*dt/6 for cj, a, b,
                     c, d in zip(c_j0, dca, dcb, dcc, dcd)]
             T_j4 = T_j0 + (dTa + 2*dTb + 2*dTc + dTd)*dt/6
-            # print(t,n_j4,rho[-1])
             n.append(n_j4)
             Tf.append(T_j4)
             for i in range(self.groups):
                 c[i].append(c_j4[i])    
             rho.append(rho_j)
 
-        tmin = np.divide(tsec,60)
-        plt.figure(1)
-        plt.plot(tmin,n)
-        plt.title('Neutron Density')
-        plt.xlabel('Time [sec]')
-        plt.ylabel('n(t)')
-        plt.yscale('log')
-        plt.figure(2)
-        plt.plot(tsec,rho)
-        plt.title('Reactivity')
-        plt.xlabel('Time [sec]')
-        plt.ylabel(r'$\rho(t)$')
-        plt.yscale('log')
-        plt.figure(3)
-        plt.plot(tsec,Tf)
-        plt.title('Fuel Temperature')
-        plt.xlabel('Time [sec]')
-        plt.ylabel(r'T_f(t)')
-        plt.yscale('linear')
-        # plt.yscale('log')
-        plt.show()
+        self.plot_results(tsec,n,rho,Tf,c)
+
 
     def Heun(self):
         rho_cost = float(0.6)              # Reactivity [$]
@@ -219,47 +181,69 @@ class krusty():
 
     def fTemp(self, n, T):
         # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
-        return self.k_factor*n
+        # self.resistance
+        R = np.log(5.5/2)/(2*np.pi*.25*15) # + 1/(400*100)
+        return self.Kf*n - 0.001 #1/R
 
     def frho(self,rho0,T,n):
-    
+        """ Reactivity with Temperature Feedback """
         # return float(rho0 + self.RTC(T)*(T-T0))
-        rho_new =  float(rho0 + self.beta*self.RTC(T)*self.k_factor*n)
-        print(rho_new)
+        rho_new =  float(rho0 + self.RTC(T)*self.Kf*n)
+        print(T,'\t',rho_new)
         return rho_new
 
     def RTC(self, T):
-        # """ Third-Order Fit to Fuel Temperature Reactivity Coefficient (INSTANTANEOUS)"""
-        alpha =  float(3.87e-11*(T+self.C_K) ** 3 - 1.06e-7*(T+self.C_K) ** 2 - 1.43e-7*(T+self.C_K) - 0.13)/100
-        # return alpha
-        """ Third-Order Fit to Fuel Temperature Reactivity Coefficient (INTEGRAL)"""
-        # alpha =  float(1.601e-13 *(T+self.C_K) ** 3 - 4.965e-10*(T+self.C_K) ** 2 + 5.147e-8*(T+self.C_K) - 1.373e-3)
+        """ Fuel Temperautre Reactivity Coeficient [K^-1] """
+        alpha = self.beta*(-7.3e-9*(T+unit['C_K'])**2 -7.58e-5*(T+unit['C_K']) -0.113)/100
         return alpha
 
     def cp(self, T):
         """ Fuel Specific Heat [J/g-C] """
         # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # 100 < T < 1000 [C]
+        # Range: 100 < T < 1000 [C]
         return float(0.137 + 5.12e-5*T + 1.99e-8*T**2)
 
     def dens(self, T):
         """ Fuel Density [g/cc] """
         # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # 20 < T < 700 [C]
+        # Range: 20 < T < 700 [C]
         return float(17.15 - 8.63e-4*(T+20))
 
     def kcond(self, T):
         """ Fuel Thermal conductivity [W/m-C] """
         # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # 20 < T < 800 [C]
+        # Range: 20 < T < 800 [C]
         return float(10.2 + 3.51e-2*T)
         # Haynes-230    return (float(0.02*T + 8.4315))
+    
+    def plot_results(self, time, n, rho, Tf, c):
+        # Neutron population
+        plt.figure(1)
+        plt.plot(time,n)
+        plt.title('Neutron Density')
+        plt.xlabel('Time [sec]')
+        plt.ylabel('n(t)')
+        plt.yscale('log')
+        # Reactivity
+        plt.figure(2)
+        plt.plot(time,rho)
+        plt.title('Reactivity')
+        plt.xlabel('Time [sec]')
+        plt.ylabel(r'$\rho(t)$')
+        plt.yscale('log')
+        # Fuel Temperature
+        plt.figure(3)
+        plt.plot(time,Tf)
+        plt.title('Fuel Temperature')
+        plt.xlabel('Time [sec]')
+        plt.ylabel(r'T_f(t)')
+        plt.yscale('linear')
+        plt.show()
 
 
 def main():
     start = time.time()
     kilo = krusty()
-    kilo.setInputs()
     # kilo.Heun()
     kilo.RungeKutta4()
     end = time.time()
