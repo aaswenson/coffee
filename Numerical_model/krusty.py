@@ -240,11 +240,18 @@ class krusty():
         plt.yscale('log')
         # Fuel Temperature
         plt.figure(3)
-        plt.plot(time,Tf)
+        plt.plot(time,Tf, label='Fuel Temp')
         plt.title('Fuel Temperature')
         plt.xlabel('Time [sec]')
         plt.ylabel(r'T_f(t)')
         plt.yscale('linear')
+        # Reactor Power
+        plt.figure(4)
+        power = np.multiply(n,self.n_W)
+        plt.plot(time,power,label = 'watts')
+        plt.xlabel('Time [sec]')
+        plt.ylabel('P(t)')
+        plt.yscale('log')
         plt.show()
 
 
