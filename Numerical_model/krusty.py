@@ -62,6 +62,8 @@ class krusty():
         A_ch = np.pi*D_ch**2/4              # cross-sectional area of heat pipe
         self.A_chs = N_ch * A_ch            # Total cross-sect. area of heat pipes
         self.Tf0 = float(20)                # Initial Fuel Temperature [C]
+        self.T_ref_rho = self.Tf0
+        self.insert = False
         dens_f = self.dens(self.Tf0)        # [g/cc]
         cp_f = self.cp(self.Tf0)            # [J/g-C]
         # # Thermal Capacity
@@ -72,9 +74,15 @@ class krusty():
         self.R_f0 = np.log(r_fo/r_fi)/(2*np.pi*hgt) # resitance term
 
     def RungeKutta4(self):        
-        Ttime = float(20*unit['sec_min'])                  # Simulation Time
-        dt = 0.01                           # Time step size
-        tsec = np.arange(0, Ttime+dt, dt)   # time vector
+        
+        times = [315, 1800, 18000]
+        dts   = [1e-3, 0.001, 0.001]
+        tsec = []
+        t0 = 0
+        for t, dt in zip(times, dts):
+            tsec += list(np.arange(t0, t, dt))
+            t0 += t
+
         rho = [self.rho0]                   # value vectors
         rho_j0 = rho[0]
         T_0 = 20
@@ -85,54 +93,51 @@ class krusty():
         c = self.c0
         order = 4                           # order of approach
         for ind, t in enumerate(tsec[1:]):
-            print(t,Tf[-1],rho[-1])
+            dt = t - tsec[ind]
+            #print(dt)
+            str = '{0:.4f} {1:.4e} {2:.4f} {3:.4f}'
+            print(str.format(t, n[-1], rho[-1], Tf[-1]))
             # initial values
             n_j0 = n[-1]
             c_j0 = [x[-1] for x in c]
             T_j0 = Tf[-1]
             Tcj0 = Tc[-1]
-            if T_j0 >= 350:
-                rho_j0 = 0
-                T_0 = 400
-            rho_j = self.rho_feedback(rho_j0,T_j0,T_0)
-            # print(t,n_j0,T_j0,rho_j0)
-            # if T_j0 >= 400:
-                # rho0 = 0
-            # rho_j = self.frho(rho0,T_j0,n_j0)
+            rho_j = self.rho_feedback(T_j0, rho[-1])
 
             # first derivative
             dna = self.fn(n_j0, c_j0, rho_j)
-            dca = [f for f in self.fc(n_j0, c_j0, rho_j)]
+            dca = self.fc(n_j0, c_j0, rho_j)
             dTa = self.fTemp(n_j0, T_j0)
             #
             n_j1 = n_j0 + dna*dt/2
             c_j1 = [c + dc*dt/2 for c, dc, in zip(c_j0, dca)]
             T_j1 = T_j0 + dTa*dt/2
             #
-            dnb = self.fn(n_j1, c_j1, rho_j0)
-            dcb = [f for f in self.fc(n_j1, c_j1, rho_j0)]
+            dnb = self.fn(n_j1, c_j1, rho_j)
+            dcb = self.fc(n_j1, c_j1, rho_j)
             dTb = self.fTemp(n_j1, T_j1)
             #
             n_j2 = n_j0 + dnb*dt/2
             c_j2 = [c + dc*dt/2 for c, dc, in zip(c_j0, dcb)]
             T_j2 = T_j0 + dTb*dt/2
             #
-            dnc = self.fn(n_j2, c_j2, rho_j0)
-            dcc = [f for f in self.fc(n_j2, c_j2, rho_j0)]
+            dnc = self.fn(n_j2, c_j2, rho_j)
+            dcc = self.fc(n_j2, c_j2, rho_j)
             dTc = self.fTemp(n_j2, T_j2)
             #
             n_j3 = n_j0 + dnc*dt
             c_j3 = [c + dc*dt for c, dc, in zip(c_j0, dcc)]
             T_j3 = T_j0 + dTc*dt/2
             #
-            dnd = self.fn(n_j3, c_j3, rho_j0)
-            dcd = [f for f in self.fc(n_j3, c_j3, rho_j0)]
+            dnd = self.fn(n_j3, c_j3, rho_j)
+            dcd = self.fc(n_j3, c_j3, rho_j)
             dTd = self.fTemp(n_j3, T_j3)
             #
             n_j4 = n_j0 + (dna + 2*dnb + 2*dnc + dnd)*dt/6
             c_j4 = [cj + (a + 2*b + 2*c + d)*dt/6 for cj, a, b,
                     c, d in zip(c_j0, dca, dcb, dcc, dcd)]
             T_j4 = T_j0 + (dTa + 2*dTb + 2*dTc + dTd)*dt/6
+            
             n.append(n_j4)
             Tf.append(T_j4)
             for i in range(self.groups):
@@ -140,40 +145,7 @@ class krusty():
             rho.append(rho_j)
 
         self.plot_results(tsec,n,rho,Tf,c)
-
-
-    def Heun(self):
-        rho_cost = float(1)              # Reactivity [$]
-        rho0 = rho_cost*self.beta           # Reactivity [delta(k)/k]
-        alpha = 0.15                        # Fuel reactivity temperature coefficient
-        K = 0.017                            # [C/kw-sec]
-        Tf0 = float(20)                     # Initial Fuel Temperature [C]
-        Ttime = float(10*60)               # total time [3 hours]
-        Nstep = float(Ttime*1000)                  # total steps
-        dt = Ttime/Nstep                    # time step size
-        tsec = np.arange(0, Ttime+dt, dt)
-        rho = [rho0]
-        Tf = [Tf0]
-        n = []
-        c = []
-        n = [self.n0]
-        c = self.c
-        for ind, tm in enumerate(tsec[1:]):
-            # precursors from last time step
-            clast = [x[-1] for x in c]
-            n_pred = n[-1] + dt * \
-                self.fn(n[-1], clast, rho[-1])    # predictor step
-            c_pred = ([cl + dt*f for cl, f in zip(clast,
-                                                  self.fc(n[-1], clast, rho[-1]))])
-            rho = [rho0 - alpha*(Tf[-1]-Tf0)]
-
-            n_corr = n[-1] + dt/2*(self.fn(n[-1], clast,
-                                           rho[-1])+self.fn(n_pred, c_pred, rho[-1]))
-            n.append(n_corr)
-            for i in range(self.groups):
-                c[i].append(clast[i]+dt/2*(self.fci(i, n[-1], clast[i],
-                                                    rho[-1]) + self.fci(i, n_pred, c_pred[i], rho[-1])))
-
+    
     def fn(self, n, c, rho):
         """ Neutron derivative function """
         return (rho-self.beta)/self.L*n + np.dot(c, self.lam)
@@ -196,28 +168,26 @@ class krusty():
         # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
         P_fuel = self.Kf * n                # Reactor power
         deltaT = T/20                         # Temp. diff. from fuel to coolant(bulk)
-        h_bar = 20000                         # [W/m^2-K]
+        h_bar = 40000                         # [W/m^2-K]
         R_f = self.R_f0/self.kcond(T)
         R_conv = 1/(h_bar*self.A_chs)
         R_total = R_f + R_conv
         if T <= 100:
             Q_out = 0
         else:
+            deltaT = 20
             Q_out = deltaT/R_total
         return (P_fuel - Q_out)/self.C_th
 
-    def frho(self,rho0,T,n):
-        """ Reactivity with Temperature Feedback """
-        # return float(rho0 + self.RTC(T)*(T-T0))
-        h_bar = 20000
-        rho_new =  float(rho0 + self.RTC(T)*(self.Kf*n - 2*(h_bar*self.A_chs)/self.C_th) )
-        # rho_new = rho0  + self.RTC(T)*(T-20)
-        print(T,'\t',rho_new)
-        return rho_new
     
-    def rho_feedback(self,rho0,T,T0):
+    def rho_feedback(self,T, rho1):
         
-        return rho0 + self.RTC(T)*(T-T0)
+        if T > 350 and self.insert == False:
+            self.insert = True
+            self.rho0 = rho1
+            self.T_ref_rho = 350
+
+        return self.rho0 + self.RTC(T)*(T-self.T_ref_rho)
 
     def RTC(self, T):
         """ Fuel Temperautre Reactivity Coeficient [K^-1] """
@@ -245,34 +215,37 @@ class krusty():
     
     def plot_results(self, time, n, rho, Tf, c):
         # Neutron population
-        plt.figure(1)
+        plt.figure()
         plt.plot(time,n)
         plt.title('Neutron Density')
         plt.xlabel('Time [sec]')
         plt.ylabel('n(t)')
         plt.yscale('log')
+        plt.savefig('npop.png')
         # Reactivity
-        plt.figure(2)
+        plt.figure()
         plt.plot(time,rho)
         plt.title('Reactivity')
         plt.xlabel('Time [sec]')
         plt.ylabel(r'$\rho(t)$')
         plt.yscale('linear')
+        plt.savefig('rho.png')
         # Fuel Temperature
-        plt.figure(3)
+        plt.figure()
         plt.plot(time,Tf, label='Fuel Temp')
         plt.title('Fuel Temperature')
         plt.xlabel('Time [sec]')
         plt.ylabel(r'T_f(t)')
         plt.yscale('linear')
+        plt.savefig('temp.png')
         # Reactor Power
-        plt.figure(4)
+        plt.figure()
         power = np.multiply(n,self.n_W)
         plt.plot(time,power,label = 'watts')
         plt.xlabel('Time [sec]')
         plt.ylabel('P(t)')
         plt.yscale('log')
-        plt.show()
+        plt.savefig('power.png')
 
 
 def main():
