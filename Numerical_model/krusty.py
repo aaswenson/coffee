@@ -58,7 +58,7 @@ class krusty():
     def reactor(self):
         self.volume = float(1940)           # Fuel volume [cc]
         N_ch = 8                            # Number of coolant channels
-        D_ch = 1.07                         # ID of heat pipe
+        D_ch = 0.0107                         # ID of heat pipe
         A_ch = np.pi*D_ch**2/4              # cross-sectional area of heat pipe
         self.A_chs = N_ch * A_ch            # Total cross-sect. area of heat pipes
         self.Tf0 = float(20)                # Initial Fuel Temperature [C]
@@ -72,52 +72,61 @@ class krusty():
         self.R_f0 = np.log(r_fo/r_fi)/(2*np.pi*hgt) # resitance term
 
     def RungeKutta4(self):        
-        Ttime = float(60*unit['sec_min'])                  # Simulation Time
+        Ttime = float(20*unit['sec_min'])                  # Simulation Time
         dt = 0.01                           # Time step size
         tsec = np.arange(0, Ttime+dt, dt)   # time vector
         rho = [self.rho0]                   # value vectors
+        rho_j0 = rho[0]
+        T_0 = 20
+        rhof = [0]
         Tf = [self.Tf0]
         Tc = [self.Tf0]
         n = [self.n0]
         c = self.c0
         order = 4                           # order of approach
         for ind, t in enumerate(tsec[1:]):
+            print(t,Tf[-1],rho[-1])
             # initial values
             n_j0 = n[-1]
             c_j0 = [x[-1] for x in c]
             T_j0 = Tf[-1]
-            rho_j0 = rho[-1]
+            Tcj0 = Tc[-1]
+            if T_j0 >= 350:
+                rho_j0 = 0
+                T_0 = 400
+            rho_j = self.rho_feedback(rho_j0,T_j0,T_0)
             # print(t,n_j0,T_j0,rho_j0)
-            rho_j = self.frho(rho[0],T_j0,n_j0)
-            if rho_j <= float(0):
-                rho_j = 0
+            # if T_j0 >= 400:
+                # rho0 = 0
+            # rho_j = self.frho(rho0,T_j0,n_j0)
+
             # first derivative
-            dna = self.fn(n_j0, c_j0, rho_j0)
-            dca = [f for f in self.fc(n_j0, c_j0, rho_j0)]
+            dna = self.fn(n_j0, c_j0, rho_j)
+            dca = [f for f in self.fc(n_j0, c_j0, rho_j)]
             dTa = self.fTemp(n_j0, T_j0)
             #
             n_j1 = n_j0 + dna*dt/2
             c_j1 = [c + dc*dt/2 for c, dc, in zip(c_j0, dca)]
             T_j1 = T_j0 + dTa*dt/2
             #
-            dnb = self.fn(n_j1, c_j1, rho_j)
-            dcb = [f for f in self.fc(n_j1, c_j1, rho_j)]
+            dnb = self.fn(n_j1, c_j1, rho_j0)
+            dcb = [f for f in self.fc(n_j1, c_j1, rho_j0)]
             dTb = self.fTemp(n_j1, T_j1)
             #
             n_j2 = n_j0 + dnb*dt/2
             c_j2 = [c + dc*dt/2 for c, dc, in zip(c_j0, dcb)]
             T_j2 = T_j0 + dTb*dt/2
             #
-            dnc = self.fn(n_j2, c_j2, rho_j)
-            dcc = [f for f in self.fc(n_j2, c_j2, rho_j)]
+            dnc = self.fn(n_j2, c_j2, rho_j0)
+            dcc = [f for f in self.fc(n_j2, c_j2, rho_j0)]
             dTc = self.fTemp(n_j2, T_j2)
             #
             n_j3 = n_j0 + dnc*dt
             c_j3 = [c + dc*dt for c, dc, in zip(c_j0, dcc)]
             T_j3 = T_j0 + dTc*dt/2
             #
-            dnd = self.fn(n_j3, c_j3, rho_j)
-            dcd = [f for f in self.fc(n_j3, c_j3, rho_j)]
+            dnd = self.fn(n_j3, c_j3, rho_j0)
+            dcd = [f for f in self.fc(n_j3, c_j3, rho_j0)]
             dTd = self.fTemp(n_j3, T_j3)
             #
             n_j4 = n_j0 + (dna + 2*dnb + 2*dnc + dnd)*dt/6
@@ -180,6 +189,8 @@ class krusty():
         """ Single group (of 6) precursor derivative function """
         return self.beta_i[group] / self.L * n - self.lam[group] * c
 
+    # def fcool(self,)
+
     def fTemp(self, n, T):
         """ Fuel Temperautre function """
         # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
@@ -189,15 +200,24 @@ class krusty():
         R_f = self.R_f0/self.kcond(T)
         R_conv = 1/(h_bar*self.A_chs)
         R_total = R_f + R_conv
-        Q_out = deltaT/R_total
-        return P_fuel - Q_out
+        if T <= 100:
+            Q_out = 0
+        else:
+            Q_out = deltaT/R_total
+        return (P_fuel - Q_out)/self.C_th
 
     def frho(self,rho0,T,n):
         """ Reactivity with Temperature Feedback """
         # return float(rho0 + self.RTC(T)*(T-T0))
-        rho_new =  float(rho0 + self.RTC(T)*self.Kf*(n-self.n0))
+        h_bar = 20000
+        rho_new =  float(rho0 + self.RTC(T)*(self.Kf*n - 2*(h_bar*self.A_chs)/self.C_th) )
+        # rho_new = rho0  + self.RTC(T)*(T-20)
         print(T,'\t',rho_new)
         return rho_new
+    
+    def rho_feedback(self,rho0,T,T0):
+        
+        return rho0 + self.RTC(T)*(T-T0)
 
     def RTC(self, T):
         """ Fuel Temperautre Reactivity Coeficient [K^-1] """
@@ -237,7 +257,7 @@ class krusty():
         plt.title('Reactivity')
         plt.xlabel('Time [sec]')
         plt.ylabel(r'$\rho(t)$')
-        plt.yscale('log')
+        plt.yscale('linear')
         # Fuel Temperature
         plt.figure(3)
         plt.plot(time,Tf, label='Fuel Temp')
