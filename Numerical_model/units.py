@@ -5,7 +5,8 @@ unit = {'Av'    : float(6.0225e23),
          'boltz' : float(1.380662e-23),
          'mass_n': float(1.674929e-27),
          'C_K'   : float(273.15),
-         'b_cm'  : float(1e-24)
+         'b_cm'  : float(1e-24),
+         'sec_min': float(60)
          }
 # Avogadro's number  [mol^-1]
 # J/MeV conversion   [J/MeV]

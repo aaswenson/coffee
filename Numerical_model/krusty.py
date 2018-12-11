@@ -72,7 +72,7 @@ class krusty():
         self.R_f0 = np.log(r_fo/r_fi)/(2*np.pi*hgt) # resitance term
 
     def RungeKutta4(self):        
-        Ttime = float(600)                  # Simulation Time
+        Ttime = float(60*unit['sec_min'])                  # Simulation Time
         dt = 0.01                           # Time step size
         tsec = np.arange(0, Ttime+dt, dt)   # time vector
         rho = [self.rho0]                   # value vectors
@@ -134,7 +134,7 @@ class krusty():
 
 
     def Heun(self):
-        rho_cost = float(0.6)              # Reactivity [$]
+        rho_cost = float(1)              # Reactivity [$]
         rho0 = rho_cost*self.beta           # Reactivity [delta(k)/k]
         alpha = 0.15                        # Fuel reactivity temperature coefficient
         K = 0.017                            # [C/kw-sec]
@@ -185,7 +185,7 @@ class krusty():
         # return (self.H0*n/(self.dens(T)*self.cp(T) * self.volume))
         P_fuel = self.Kf * n                # Reactor power
         deltaT = T/20                         # Temp. diff. from fuel to coolant(bulk)
-        h_bar = 2000                         # [W/m^2-K]
+        h_bar = 20000                         # [W/m^2-K]
         R_f = self.R_f0/self.kcond(T)
         R_conv = 1/(h_bar*self.A_chs)
         R_total = R_f + R_conv
