@@ -4,26 +4,32 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def save_results(t, n, rho, p, Tf, c, dndt):
+def save_results(data):
     """Save results of model to csv for future plotting.
     """
-    names = ['times', 'npop', 'rho', 'Tf', 'c', 'power', 'dndt']
-    savesteps = 10
-    rows = len(t[0::savesteps])
-    data = np.zeros(rows, dtype={'names' : names,
-                                 'formats' : ['f8']*len(names)
-                                })
     
-    data['times'] = t[0::savesteps]
-    data['npop'] = n[0::savesteps]
-    data['rho'] = rho[0::savesteps]
-    data['Tf'] = Tf[0::savesteps]
-    data['power'] = p[0::savesteps]
-    data['dndt'] = dndt[0::savesteps]
-    data['c'] = [sum(x) for x in c][0::savesteps]
+    names = list(data.dtype.names)
+    precursors = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6']
+    names += precursors
+    formats = ['f8']*len(names)
 
+    skip = 10
+    savedata = np.zeros(len(data[0::skip]),
+                        dtype={'names' : names,
+                               'formats' : formats
+                              })
 
-    np.savetxt('results.csv', data, delimiter=',', 
+    for col in data.dtype.names:
+        if col == 'c':
+            continue
+        savedata[col][:] = data[col][0::skip]
+
+    # save the precursor data individually
+    for idx, c in enumerate(precursors):
+        cs = [x[idx] for x in data['c'][0::skip]]
+        savedata[c][:] = cs
+
+    np.savetxt('results.csv', savedata, delimiter=',', 
            fmt='%10.5f', header=','.join(names), comments='')
 
 def load_from_csv(datafile="results.csv"):
@@ -93,9 +99,8 @@ def plot_results(data, ind, dep, log=None):
 
 if __name__=='__main__':
     data = load_from_csv()
-    data = filter_data(['times < 10'], data)
     plot_results(data, 'times', 'c', 'semilogy')
-    plot_results(data, 'times', 'power', 'semilogy')
+    plot_results(data, 'times', 'power')
     plot_results(data, 'times', 'Tf')
     plot_results(data, 'times', 'rho')
     plot_results(data, 'Tf', 'rho')

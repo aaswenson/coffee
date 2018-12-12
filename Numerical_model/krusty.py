@@ -3,7 +3,7 @@ import sys
 import numpy as np
 import time
 from units import *
-from solvers import runge_kutta
+from solvers import runge_kutta, update_value
 import plot_utilities as pu
 
 """
@@ -34,8 +34,8 @@ class krusty():
     insert = False
 
     def __init__(self, w_Pu=0):
-        self.n0 = 100                     # initial neutron population
-        self.rho_cost = 0.60            # Initial step reactivity cost [$]
+        self.n0 = 100                   # initial neutron population
+        self.rho_cost = 0.15            # Initial step reactivity cost [$]
         self.matdat = FuelMat(w_Pu)
         self.reactor()                  # set Physical parameters of system
         # reactivity insertion
@@ -60,92 +60,108 @@ class krusty():
 
     def RungeKutta4(self):        
         
-        times = [10000]
-        dts   = [0.002]
+        times = [2000]
+        dts   = [0.001]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
             tsec += list(np.arange(t0, t, dt))
             t0 += t
 
-        c   = np.zeros((len(tsec), self.matdat.groups))
-        rho = np.zeros(len(tsec))
-        n   = np.zeros(len(tsec))
-        Tf  = np.zeros(len(tsec))
-        p   = np.zeros(len(tsec))
-        dNdt = np.zeros(len(tsec))
+        tp = np.dtype([('times', 'f8'), ('npop', 'f8'), ('rho', 'f8'),
+                       ('Tf', 'f8'), ('c', 'f8', (6,)), 
+                       ('power', 'f8'), ('dndt', 'f8')])
 
-        p[0]   = 0
-        c[0]   = np.array(self.matdat.c0)
-        rho[0] = self.rho_insert
-        n[0]   = self.n0
-        Tf[0]  = self.Tf0
+        data = np.zeros(len(tsec), dtype=tp)
         
-        for ind, t in enumerate(tsec[1:]):
+        data['times'] = tsec
+        data['c'][:]     = self.matdat.c0*self.n0
+        data['rho'][:]   = self.rho_insert
+        data['npop'][:]  = self.n0
+        data['Tf'][:]    = self.Tf0
+        
+        for ind, t in enumerate(data[1:]['times']):
             ind += 1
-            dt = t - tsec[ind-1]
+            dt = t - data[ind-1]['times']
             # initial values
-            x0 = [n[ind-1], c[ind-1], rho[ind-1], Tf[ind-1]]
-            dndt = runge_kutta(x0, self.fn, dt, 0)
-            dcdt = runge_kutta(x0, self.fc, dt, 1)
-            dTdt = runge_kutta(x0, self.fT, dt, 2)
-
-            n[ind]  = n[ind-1] + dndt 
-            c[ind]  = np.add(c[ind-1], dcdt) 
-            Tf[ind] = Tf[ind-1] + dTdt
-            p[ind]  = n[ind] * self.matdat.n_W
-            rho[ind] = self.rho_feedback(Tf[ind], rho[ind])
-            dNdt[ind] = dndt    
-            str = '{0:.4f} {1:.4e} {2:.4f} {3:.4f}'
-            print(str.format(t, p[ind], rho[ind], Tf[ind]))
-
-        pu.save_results(tsec, n, rho, p, Tf, c, dNdt)
-    
-    def fn(self, args):
-        """ Neutron derivative function """
-        [n, c, rho, T] = args
-        return (rho-self.matdat.beta)/self.matdat.L*n + np.dot(c, self.matdat.lam)
-
-    def fc(self, args):
-        """ 6-group precursor derivative function """
-        [n, c, rho, T] = args
+            x0 = data[ind-1]
+            dndt = runge_kutta(x0, self.fn, dt, 'npop')
+            dcdt = runge_kutta(x0, self.fc, dt, 'c')
+            dTdt = runge_kutta(x0, self.fT, dt, 'Tf')
+            
+            update_value(dndt, data['npop'], dt, ind)
+            update_value(dcdt, data['c'], dt, ind)
+            update_value(dTdt, data['Tf'], dt, ind)
+            
+            data[ind]['power'] = dndt*self.matdat.n_W / dt 
+            data[ind]['dndt'] = dndt    
+            self.rho_feedback(data, ind)
+            str = '{0:.4f} {1:.4e} {2:.4e} {3:.4f}'
+            dat = data[ind]
+            print(str.format(t, dat['npop'], dat['power'], dat['Tf']))
         
-        cs = np.add(np.divide(np.multiply(n, self.matdat.beta_i), self.matdat.L), 
+
+        pu.save_results(data)
+         
+    def fn(self, data):
+        """ Neutron derivative function """
+        
+        c = data['c']
+        n = data['npop']
+        rho = data['rho']
+
+        dndt =  ((rho-self.matdat.beta)/self.matdat.L)*n + np.dot(c, self.matdat.lam)
+        
+        return dndt
+
+    def fc(self, data):
+        """ 6-group precursor derivative function """
+        
+        c   = data['c']
+        n   = data['npop']
+        
+        dcdt = np.add(np.divide(np.multiply(n, self.matdat.beta_i), self.matdat.L), 
                       np.multiply(-self.matdat.lam, c))
         
-        return cs
+        return dcdt
 
-    def fT(self, args):
+    def fT(self, data):
         """ Fuel Temperautre function """
-        [n, c, rho, T] = args
         
-        P_fuel = n*self.matdat.n_W            # Reactor power
-        h_bar = 209000                         # [W/m^2-K]
-        R_conv = 1/(h_bar*self.A_chs)
+        n = data['npop']
+        p = data['power']
+        T = data['Tf']        
         C = self.cp(T) * self.mass
-        
+
         # adiabatic heating
         if T <= 373.15:
             Q_out = 0
         else:
-            deltaT = 7
-            Q_out = deltaT / R_conv
-        
-        return (P_fuel - Q_out) / C
+            Q_out = 0 #3000
 
-    def rho_feedback(self, T, rho1):
+        Q_rad = 1.4609e-9*(T**4 - 293.15**4)
+        dTdt = (p - Q_out - Q_rad) / C
+        
+        return dTdt
+
+    def rho_feedback(self, data, ind):
         """Calculate reactivity response to temperature.
         """
-        if T > 673.15 and self.insert == False:
-            self.insert = True
-            self.rho_insert = 0
-            self.T_ref_rho = 673.15
+        rho1 = data[ind-1]['rho']
+        T = data[ind-1]['Tf']
 
-        return self.rho_insert + self.RTC(T)*(T-self.T_ref_rho)
+#        if T > 673.15 and self.insert == False:
+#            self.insert = True
+#            self.rho_insert = 0
+#            self.T_ref_rho = 673.15
+
+        rho2 = self.rho_insert + self.RTC(T)*(T-self.T_ref_rho)
+        
+        data[ind]['rho'] = rho2
 
 def main():
     start = time.time()
-    kilo = krusty(0.5)
+    kilo = krusty(0)
     kilo.RungeKutta4()
     end = time.time()
     print("Calculation time: %0.f" % (end-start))
