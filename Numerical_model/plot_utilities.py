@@ -1,3 +1,4 @@
+import operator
 import pandas
 import numpy as np
 import matplotlib.pyplot as plt
@@ -60,11 +61,19 @@ def plot_results(data, ind, dep, log=None):
                      'power' : 'Thermal Power [W]',
                      'dndt'  : 'Neutron Pop. Time Rate of Change [n/s]'
                     }
+    titles = {'npop'  : {'times' : 'Neutron Population Through Startup'},
+              'rho'   : {'times' : 'Reactivity',
+                         'Tf'    : 'Reactivity Response to Fuel Temperature'
+                        },
+              'c'     : {'times' : 'Precursor Concentration'},
+              'power' : {'times' : 'Fission Power'},
+              'Tf'    : {'times' : 'Fuel Temperature'}
+             }
     # plot
     fig = plt.figure()
     plt.plot(data[ind], data[dep])
     # titles and labels
-    plt.title("{0} vs. {1}".format(dep, ind))
+    plt.title(titles[dep][ind])
     plt.xlabel(label_strings[ind])
     plt.ylabel(label_strings[dep])
 
@@ -77,15 +86,17 @@ def plot_results(data, ind, dep, log=None):
         plt.xscale('log')
 
     savename = '{0}_vs_{1}.png'.format(dep, ind)
-    plt.savefig(savename, dpi=1000, format='png')
+    plt.savefig(savename, dpi=500, format='png')
 
     return plt
 
 
 if __name__=='__main__':
     data = load_from_csv()
+    data = filter_data(['times < 10'], data)
     plot_results(data, 'times', 'c', 'semilogy')
     plot_results(data, 'times', 'power', 'semilogy')
     plot_results(data, 'times', 'Tf')
     plot_results(data, 'times', 'rho')
+    plot_results(data, 'Tf', 'rho')
     plot_results(data, 'times', 'npop', 'semilogy')

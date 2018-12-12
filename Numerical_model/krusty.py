@@ -145,7 +145,7 @@ class krusty():
 
 def main():
     start = time.time()
-    kilo = krusty()
+    kilo = krusty(0.5)
     kilo.RungeKutta4()
     end = time.time()
     print("Calculation time: %0.f" % (end-start))
