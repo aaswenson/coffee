@@ -6,6 +6,8 @@ import scipy
 import time
 import matplotlib.pyplot as plt
 from units import *
+from solvers import runge_kutta
+import plot_utilities as pu
 
 """
 PRKE Finite Difference for KRUSTY KRAB REACTOR
@@ -42,8 +44,8 @@ class krusty():
 
     def RungeKutta4(self):        
         
-        times = [300, 1800]
-        dts   = [0.001, 0.001]
+        times = [1000]
+        dts   = [0.001]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
@@ -54,7 +56,6 @@ class krusty():
         rho = np.zeros(len(tsec))
         n   = np.zeros(len(tsec))
         Tf  = np.zeros(len(tsec))
-        Tc  = np.zeros(len(tsec))
         p   = np.zeros(len(tsec))
 
         p[0]   = 0
@@ -62,93 +63,46 @@ class krusty():
         rho[0] = self.rho_insert
         n[0]   = self.n0
         Tf[0]  = self.Tf0
-        Tc[0]  = self.Tf0
-        
-            
 
         for ind, t in enumerate(tsec[1:]):
             ind += 1
             dt = t - tsec[ind-1]
             # initial values
-            n_j0 = n[ind-1]
-            c_j0 = c[ind-1]
-            T_j0 = Tf[ind-1]
-            Tcj0 = Tc[ind-1]
-            rho_j = self.rho_feedback(T_j0, rho[ind-1])
-            
-            # first derivative
-            dna = self.fn(n_j0, c_j0, rho_j)
-            dca = self.fc(n_j0, c_j0, rho_j)
-            dTa = self.fTemp(n_j0, T_j0)
-            #
-            n_j1 = n_j0 + dna*dt/2
-            c_j1 = np.add(c_j0, np.multiply(dca, dt/2))
-            T_j1 = T_j0 + dTa*dt/2
-            #
-            dnb = self.fn(n_j1, c_j1, rho_j)
-            dcb = self.fc(n_j1, c_j1, rho_j)
-            dTb = self.fTemp(n_j1, T_j1)
-            #
-            n_j2 = n_j0 + dnb*dt/2
-            c_j2 = np.add(c_j0, np.multiply(dcb, dt/2))
-            T_j2 = T_j0 + dTb*dt/2
-            #
-            dnc = self.fn(n_j2, c_j2, rho_j)
-            dcc = self.fc(n_j2, c_j2, rho_j)
-            dTc = self.fTemp(n_j2, T_j2)
-            #
-            n_j3 = n_j0 + dnc*dt
-            c_j3 = np.add(c_j0, np.multiply(dcc, dt))
-            T_j3 = T_j0 + dTc*dt
-            #
-            dnd = self.fn(n_j3, c_j3, rho_j)
-            dcd = self.fc(n_j3, c_j3, rho_j)
-            dTd = self.fTemp(n_j3, T_j3)
-            #
-            dndt =  (dna + 2*dnb + 2*dnc + dnd)*dt/6
-            dcdt =  np.add(np.add(np.add(dca, 2*dcb), 2*dcc), dcd)*dt/6
-            dTdt =  (dTa + 2*dTb + 2*dTc + dTd)*dt/6
-            
-            n_1 = n_j0 + (dna + 2*dnb + 2*dnc + dnd)*dt/6
-            c_1 = c_j0 + np.add(np.add(np.add(dca, 2*dcb), 2*dcc), dcd)*dt/6
-            T_1 = T_j0 + (dTa + 2*dTb + 2*dTc + dTd)*dt/6
-            
-            n[ind]  = n_1
-            Tf[ind] = T_1
-            p[ind]  = n_1 * self.matdat.n_W
-            rho[ind] = rho_j
-            c[ind] = np.array(c_1)
-            
-#            if ind % 5000 == 0 and ind > 0:
-#                self.plot_results(tsec[:ind],
-#                                  n[:ind],
-#                                  rho[:ind],
-#                                  Tf[:ind],
-#                                  c[:ind])
+            x0 = [n[ind-1], c[ind-1], rho[ind-1], Tf[ind-1]]
+            dndt = runge_kutta(x0, self.fn, dt, 0)
+            dcdt = runge_kutta(x0, self.fc, dt, 1)
+            dTdt = runge_kutta(x0, self.fT, dt, 2)
+
+            n[ind]  = n[ind-1] + dndt 
+            c[ind]  = np.add(c[ind-1], dcdt) 
+            Tf[ind] = Tf[ind-1] + dTdt
+            p[ind]  = n[ind] * self.matdat.n_W
+            rho[ind] = self.rho_feedback(Tf[ind], rho[ind])
             
             str = '{0:.4f} {1:.4e} {2:.4f} {3:.4f}'
-            print(str.format(t, p[ind], rho[ind], T_1))
+            #print(str.format(t, p[ind], rho[ind], Tf[ind]))
+#            print(str.format(t, dndt, dcdt[0], dTdt))
 
-        self.plot_results(tsec,n,rho,Tf,c)
+        pu.save_results(tsec, n, rho, p, Tf, c)
     
-    def fn(self, n, c, rho):
+    def fn(self, args):
         """ Neutron derivative function """
+        [n, c, rho, T] = args
         return (rho-self.matdat.beta)/self.matdat.L*n + np.dot(c, self.matdat.lam)
 
-    def fc(self, n, c, rho):
+    def fc(self, args):
         """ 6-group precursor derivative function """
+        [n, c, rho, T] = args
         
         cs = np.add(np.divide(np.multiply(n, self.matdat.beta_i), self.matdat.L), 
                       np.multiply(-self.matdat.lam, c))
         
         return cs
 
-    def fci(self, group, n, c, rho):
-        """ Single group (of 6) precursor derivative function """
-        return self.matdat.beta_i[group] / self.matdat.L * n - self.matdat.lam[group] * c
-
-    def fTemp(self, n, T):
+    def fT(self, args):
         """ Fuel Temperautre function """
+        [n, c, rho, T] = args
+        
         P_fuel = n*self.matdat.n_W            # Reactor power
         deltaT = T/20                         # Temp. diff. from fuel to coolant(bulk)
         h_bar = 20000                         # [W/m^2-K]
@@ -202,42 +156,6 @@ class krusty():
         return float(10.2 + 3.51e-2*T)
         # Haynes-230    return (float(0.02*T + 8.4315))
     
-    def plot_results(self, time, n, rho, Tf, c):
-        # Neutron population
-        plt.figure()
-        plt.plot(time,n)
-        plt.title('Neutron Density')
-        plt.xlabel('Time [sec]')
-        plt.ylabel('n(t)')
-        plt.yscale('log')
-        plt.savefig('npop.png')
-        # Reactivity
-        plt.figure()
-        plt.plot(time,rho)
-        plt.title('Reactivity')
-        plt.xlabel('Time [sec]')
-        plt.ylabel(r'$\rho(t)$')
-        plt.yscale('linear')
-        plt.savefig('rho.png')
-        # Fuel Temperature
-        plt.figure()
-        plt.plot(time,Tf, label='Fuel Temp')
-        plt.title('Fuel Temperature')
-        plt.xlabel('Time [sec]')
-        plt.ylabel(r'T_f(t)')
-        plt.yscale('linear')
-        plt.savefig('temp.png')
-        # Reactor Power
-        plt.figure()
-        power = np.multiply(n,self.matdat.n_W)
-        plt.plot(time,power,label = 'watts')
-        plt.xlabel('Time [sec]')
-        plt.ylabel('P(t)')
-        plt.yscale('log')
-        plt.savefig('power.png')
-        
-        plt.clf()
-        plt.close()
 
 def main():
     start = time.time()
