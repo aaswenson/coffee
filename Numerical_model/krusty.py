@@ -1,10 +1,7 @@
 #!/usr/bin/python3
 import sys
-import os
 import numpy as np
-import scipy
 import time
-import matplotlib.pyplot as plt
 from units import *
 from solvers import runge_kutta
 import plot_utilities as pu
@@ -14,9 +11,28 @@ PRKE Finite Difference for KRUSTY KRAB REACTOR
 """
 
 class krusty():
+    
+    # Reactivity temperature coefficient [dk/k/K]
+    RTC = lambda self, T:self.matdat.beta*(-7.3e-11*(T)**2\
+                                           -7.58e-7*(T) - 1.13e-3)
+
+    # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
+    # Range: 100 < T < 1000 [C]
+    cp = lambda self, T: 0.137 + 5.12e-5*(T-unit['C_K'])\
+                         + 1.99e-8*(T-unit['C_K'])**2
+
+    # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
+    # Range: 20 < T < 700 [C]
+    dens = lambda self, T: 17.15 - 8.63e-4*(T-unit['C_K'])+20
+
+    # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
+    # Range: 20 < T < 800 [C]
+    kcond = lambda self, T: 10.2 + 3.51e-2*(T-unit['C_K'])
+
     # control insertion state, start simulational with step insertion of
     # reactivity so insert == False
     insert = False
+
     def __init__(self, w_Pu=0):
         self.n0 = 1                     # initial neutron population
         self.rho_cost = 0.60            # Initial step reactivity cost [$]
@@ -130,31 +146,6 @@ class krusty():
 
         return self.rho_insert + self.RTC(T)*(T-self.T_ref_rho)
 
-    def RTC(self, T):
-        """ Fuel Temperautre Reactivity Coeficient [K^-1] """
-        alpha = self.matdat.beta*(-7.3e-9*(T)**2 -7.58e-5*(T) -0.113)/100
-        return alpha
-
-    def cp(self, T):
-        """ Fuel Specific Heat [J/g-C] """
-        # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # Range: 100 < T < 1000 [C]
-        T = T - unit['C_K']
-
-        return float(0.137 + 5.12e-5*T + 1.99e-8*T**2) 
-
-    def dens(self, T):
-        """ Fuel Density [g/cc] """
-        # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # Range: 20 < T < 700 [C]
-        return float(17.15 - 8.63e-4*(T+20))
-
-    def kcond(self, T):
-        """ Fuel Thermal conductivity [W/m-C] """
-        # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
-        # Range: 20 < T < 800 [C]
-        return float(10.2 + 3.51e-2*T)
-        # Haynes-230    return (float(0.02*T + 8.4315))
     
 
 def main():
