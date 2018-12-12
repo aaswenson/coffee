@@ -3,10 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def save_results(t, n, rho, p, Tf, c):
+def save_results(t, n, rho, p, Tf, c, dndt):
     """Save results of model to csv for future plotting.
     """
-    names = ['times', 'npop', 'rho', 'Tf', 'c', 'power']
+    names = ['times', 'npop', 'rho', 'Tf', 'c', 'power', 'dndt']
     savesteps = 10
     rows = len(t[0::savesteps])
     data = np.zeros(rows, dtype={'names' : names,
@@ -18,6 +18,7 @@ def save_results(t, n, rho, p, Tf, c):
     data['rho'] = rho[0::savesteps]
     data['Tf'] = Tf[0::savesteps]
     data['power'] = p[0::savesteps]
+    data['dndt'] = dndt[0::savesteps]
     data['c'] = [sum(x) for x in c][0::savesteps]
 
 
@@ -56,11 +57,12 @@ def plot_results(data, ind, dep, log=None):
                      'rho'   : 'reactivity [-]',
                      'Tf'    : 'Fuel Temperature [K]',
                      'c'     : 'Total Precursor Conc. [Bq]',
-                     'power' : 'Thermal Power [W]'
+                     'power' : 'Thermal Power [W]',
+                     'dndt'  : 'Neutron Pop. Time Rate of Change [n/s]'
                     }
     # plot
     fig = plt.figure()
-    plt.scatter(data[ind], data[dep], s=6)
+    plt.plot(data[ind], data[dep])
     # titles and labels
     plt.title("{0} vs. {1}".format(dep, ind))
     plt.xlabel(label_strings[ind])
@@ -83,5 +85,7 @@ def plot_results(data, ind, dep, log=None):
 if __name__=='__main__':
     data = load_from_csv()
     plot_results(data, 'times', 'c', 'semilogy')
-    plot_results(data, 'times', 'power')
+    plot_results(data, 'times', 'power', 'semilogy')
     plot_results(data, 'times', 'Tf')
+    plot_results(data, 'times', 'rho')
+    plot_results(data, 'times', 'npop', 'semilogy')

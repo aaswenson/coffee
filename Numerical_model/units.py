@@ -76,7 +76,7 @@ class FuelMat:
             self.lam += self.lams[fuel] * self.afrac[fuel]
         
 
-        self.n_W = self.E_fission/self.nu   # conversion factor from neutron to watts
+        self.n_W = self.E_fission/(self.nu)  # conversion factor from neutron to watts
         # Delayed Neutron Fractions
         self.beta = sum(self.beta_i)            # Total Beta Fraction
         self.groups = len(self.lam)             # Number of delayed groups

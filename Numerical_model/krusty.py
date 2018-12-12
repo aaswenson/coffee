@@ -23,7 +23,7 @@ class krusty():
 
     # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 20 < T < 700 [C]
-    dens = lambda self, T: 17.15 - 8.63e-4*(T-unit['C_K'])+20
+    dens = lambda self, T: 17.15 - 8.63e-4*(T-unit['C_K']+20)
 
     # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 20 < T < 800 [C]
@@ -34,7 +34,7 @@ class krusty():
     insert = False
 
     def __init__(self, w_Pu=0):
-        self.n0 = 1                     # initial neutron population
+        self.n0 = 100                     # initial neutron population
         self.rho_cost = 0.60            # Initial step reactivity cost [$]
         self.matdat = FuelMat(w_Pu)
         self.reactor()                  # set Physical parameters of system
@@ -60,8 +60,8 @@ class krusty():
 
     def RungeKutta4(self):        
         
-        times = [1000]
-        dts   = [0.001]
+        times = [10000]
+        dts   = [0.002]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
@@ -73,13 +73,14 @@ class krusty():
         n   = np.zeros(len(tsec))
         Tf  = np.zeros(len(tsec))
         p   = np.zeros(len(tsec))
+        dNdt = np.zeros(len(tsec))
 
         p[0]   = 0
         c[0]   = np.array(self.matdat.c0)
         rho[0] = self.rho_insert
         n[0]   = self.n0
         Tf[0]  = self.Tf0
-
+        
         for ind, t in enumerate(tsec[1:]):
             ind += 1
             dt = t - tsec[ind-1]
@@ -94,12 +95,11 @@ class krusty():
             Tf[ind] = Tf[ind-1] + dTdt
             p[ind]  = n[ind] * self.matdat.n_W
             rho[ind] = self.rho_feedback(Tf[ind], rho[ind])
-            
+            dNdt[ind] = dndt    
             str = '{0:.4f} {1:.4e} {2:.4f} {3:.4f}'
-            #print(str.format(t, p[ind], rho[ind], Tf[ind]))
-#            print(str.format(t, dndt, dcdt[0], dTdt))
+            print(str.format(t, p[ind], rho[ind], Tf[ind]))
 
-        pu.save_results(tsec, n, rho, p, Tf, c)
+        pu.save_results(tsec, n, rho, p, Tf, c, dNdt)
     
     def fn(self, args):
         """ Neutron derivative function """
@@ -120,42 +120,35 @@ class krusty():
         [n, c, rho, T] = args
         
         P_fuel = n*self.matdat.n_W            # Reactor power
-        deltaT = T/20                         # Temp. diff. from fuel to coolant(bulk)
-        h_bar = 20000                         # [W/m^2-K]
-        R_f = self.R_f0/self.kcond(T)
+        h_bar = 209000                         # [W/m^2-K]
         R_conv = 1/(h_bar*self.A_chs)
-        R_total = R_f + R_conv
-        
         C = self.cp(T) * self.mass
         
+        # adiabatic heating
         if T <= 373.15:
             Q_out = 0
         else:
-            deltaT = 373
-            Q_out = deltaT/R_total
+            deltaT = 7
+            Q_out = deltaT / R_conv
         
-        return (P_fuel - Q_out)/C
+        return (P_fuel - Q_out) / C
 
-    def rho_feedback(self,T, rho1):
+    def rho_feedback(self, T, rho1):
         """Calculate reactivity response to temperature.
         """
-        if T > 623.15 and self.insert == False:
+        if T > 673.15 and self.insert == False:
             self.insert = True
-            self.rho_insert = rho1
-            self.T_ref_rho = 623.15
+            self.rho_insert = 0
+            self.T_ref_rho = 673.15
 
         return self.rho_insert + self.RTC(T)*(T-self.T_ref_rho)
-
-    
 
 def main():
     start = time.time()
     kilo = krusty()
-    # kilo.Heun()
     kilo.RungeKutta4()
     end = time.time()
     print("Calculation time: %0.f" % (end-start))
-
 
 if __name__ == "__main__":
     main()
