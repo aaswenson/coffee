@@ -61,7 +61,7 @@ class krusty():
     def RungeKutta4(self):        
         
         times = [2000]
-        dts   = [0.001]
+        dts   = [0.01]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
@@ -139,8 +139,7 @@ class krusty():
         else:
             Q_out = 0 #3000
 
-        Q_rad = 1.4609e-9*(T**4 - 293.15**4)
-        dTdt = (p - Q_out - Q_rad) / C
+        dTdt = (p - Q_out) / C
         
         return dTdt
 

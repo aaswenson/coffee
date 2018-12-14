@@ -62,7 +62,7 @@ class FuelMat:
     
     def nuc_data_make(self):
         # Fission parameters
-        self.L = float(2.4e-5)                  # mean neutron lifetime
+        self.L = 2.4e-5
         self.E_fission = 0
         self.nu = 0
         self.beta_i = np.zeros(6)

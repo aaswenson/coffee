@@ -39,6 +39,20 @@ def load_from_csv(datafile="results.csv"):
     
     return data
 
+def unit_conv(conversions, data):
+    """Apply unit conversions to the data.
+    """
+    opers = {'x' : np.multiply,
+             '/' : np.divide,
+             '+' : np.add
+            }
+    for conv in conversions:
+        op = opers[conv.split()[1]]
+        key = conv.split()[0]
+        val = float(conv.split()[2])
+        data[key] = op(data[key], val)
+
+    return data
 
 def filter_data(filters, data):
 
@@ -99,6 +113,7 @@ def plot_results(data, ind, dep, log=None):
 
 if __name__=='__main__':
     data = load_from_csv()
+    data = unit_conv(['times / 60'], data)
     plot_results(data, 'times', 'c', 'semilogy')
     plot_results(data, 'times', 'power')
     plot_results(data, 'times', 'Tf')
