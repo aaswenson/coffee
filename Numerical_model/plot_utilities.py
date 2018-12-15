@@ -75,16 +75,18 @@ def plot_results(data, ind, dep, log=None):
     """
     label_strings = {'times' : 'Time [s]',
                      'npop'  : 'Neutron Population [-]',
-                     'rho'   : 'reactivity [-]',
+                     'rho'   : 'reactivity [$]',
                      'Tf'    : 'Fuel Temperature [K]',
                      'c'     : 'Total Precursor Conc. [Bq]',
                      'power' : 'Thermal Power [W]',
+                     'rho_insert' : 'Inserted Reactivity [$]',
+                     'rho_feedback' : 'Reactivity Feedback [$]',
                      'dndt'  : 'Neutron Pop. Time Rate of Change [n/s]'
                     }
     titles = {'npop'  : {'times' : 'Neutron Population Through Startup'},
-              'rho'   : {'times' : 'Reactivity',
-                         'Tf'    : 'Reactivity Response to Fuel Temperature'
-                        },
+              'rho'   : {'times' : 'Reactivity'},
+              'rho_feedback' : {'times' : 'Reactivity Temperature Feedback'},
+              'rho_insert' : {'times' : 'Inserted Reactivity'},
               'c'     : {'times' : 'Precursor Concentration'},
               'power' : {'times' : 'Fission Power'},
               'Tf'    : {'times' : 'Fuel Temperature'}
@@ -114,9 +116,13 @@ def plot_results(data, ind, dep, log=None):
 if __name__=='__main__':
     data = load_from_csv()
     data = unit_conv(['times / 60'], data)
+    data = filter_data(['times < 30'], data) 
+    dol  = ['rho / 0.00642', 'rho_insert / 0.00642', 'rho_feedback / 0.00642']
+    data = unit_conv(dol, data)
     plot_results(data, 'times', 'c', 'semilogy')
     plot_results(data, 'times', 'power')
     plot_results(data, 'times', 'Tf')
     plot_results(data, 'times', 'rho')
-    plot_results(data, 'Tf', 'rho')
-    plot_results(data, 'times', 'npop', 'semilogy')
+    plot_results(data, 'times', 'rho_insert')
+    plot_results(data, 'times', 'rho_feedback')
+    plot_results(data, 'times', 'npop')# 'semilogy')

@@ -12,6 +12,12 @@ PRKE Finite Difference for KRUSTY KRAB REACTOR
 
 class krusty():
     
+    rho_follow = False
+    
+    # Reactivity temperature coefficient [dk/k/K]
+    RTC = lambda self, T: self.matdat.beta*(-7.3e-11*(T)**2 
+                                            -7.58e-7*(T) 
+                                            - 1.13e-3)
 
     # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 100 < T < 1000 [C]
@@ -31,10 +37,12 @@ class krusty():
     insert = False
 
     def __init__(self, w_Pu=0):
-        self.n0 = 100                   # initial neutron population
-        self.rho_cost = 0.15            # Initial step reactivity cost [$]
         self.matdat = FuelMat(w_Pu)
         self.reactor()                  # set Physical parameters of system
+        self.n0 = 100                   # initial neutron population
+        self.rho_func = self.rho_free
+        self.rho_cost = 0.15            # Initial step reactivity cost [$]
+        self.stop_follow = 0.30*self.matdat.beta
         # reactivity insertion
         self.rho_insert = self.rho_cost * self.matdat.beta
  
@@ -58,7 +66,7 @@ class krusty():
     def RungeKutta4(self):        
         
         times = [2000]
-        dts   = [0.01]
+        dts   = [0.001]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
@@ -67,11 +75,12 @@ class krusty():
 
         tp = np.dtype([('times', 'f8'), ('npop', 'f8'), ('rho', 'f8'),
                        ('Tf', 'f8'), ('c', 'f8', (6,)), 
-                       ('power', 'f8'), ('dndt', 'f8')])
+                       ('power', 'f8'), ('dndt', 'f8'), ('rho_insert', 'f8'), 
+                       ('rho_feedback', 'f8')])
 
         data = np.zeros(len(tsec), dtype=tp)
         
-        data['times'] = tsec
+        data['times']    = tsec
         data['c'][:]     = self.matdat.c0*self.n0
         data['rho'][:]   = self.rho_insert
         data['npop'][:]  = self.n0
@@ -90,13 +99,13 @@ class krusty():
             update_value(dcdt, data['c'], dt, ind)
             update_value(dTdt, data['Tf'], dt, ind)
             
-            data[ind]['power'] = dndt*self.matdat.n_W / dt 
+            data[ind]['power'] = data[ind]['npop']*self.matdat.n_W / dt
             data[ind]['dndt'] = dndt    
-            self.rho_feedback(data, ind)
+            self.rho_func(data[ind])
             str = '{0:.4f} {1:.4e} {2:.4e} {3:.4f}'
             dat = data[ind]
-            print(str.format(t, dat['npop'], dat['power'], dat['Tf']))
-        
+            print(str.format(t, dat['npop'], dat['rho'], dat['rho_feedback']))
+            
 
         pu.save_results(data)
          
@@ -139,25 +148,36 @@ class krusty():
         dTdt = (p - Q_out) / C
         
         return dTdt
+    
+    def rho_free(self, data):
+        """Reactivity for free run
+        """
+        
+        T = data['Tf']
+        data['rho_feedback'] = self.RTC(T)*(T-self.T_ref_rho)
+        data['rho_insert'] = self.rho_insert
+        data['rho'] = data['rho_insert'] + data['rho_feedback']
+        
 
-    def rho_feedback(self, data, ind):
+    def rho_maintain(self, data):
         """Calculate reactivity response to temperature.
         """
-        rho1 = data[ind-1]['rho']
-        T = data[ind-1]['Tf']
-
-#        if T > 673.15 and self.insert == False:
-#            self.insert = True
-#            self.rho_insert = 0
-#            self.T_ref_rho = 673.15
-
-        rho2 = self.rho_insert + self.RTC(T)*(T-self.T_ref_rho)
+        T = data['Tf']
+        data['rho_feedback'] = self.RTC(T)*(T-self.T_ref_rho)
         
-        data[ind]['rho'] = rho2
-
+        if (-data['rho_feedback'] > self.rho_insert) and\
+           (self.rho_follow == False):
+            self.rho_follow = True
+        
+        if self.rho_follow and (self.rho_insert < self.stop_follow):
+            self.rho_insert = -data['rho_feedback']
+        
+        data['rho_insert'] = self.rho_insert
+        data['rho'] = data['rho_insert'] + data['rho_feedback']
+        
 def main():
     start = time.time()
-    kilo = krusty(0)
+    kilo = krusty(1)
     kilo.RungeKutta4()
     end = time.time()
     print("Calculation time: %0.f" % (end-start))

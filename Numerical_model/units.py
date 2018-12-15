@@ -26,41 +26,6 @@ dens = {'U235' : float(19.1),
         'Pu239' : float(19.86)
        }
 
-ins1 = lambda T: 0.15
-ins2 = lambda T: Reactivity.feedback(beta, T)
-
-class Reactivity(self):
-    """
-    """
-    def __init__(self, times, insertion):
-        """
-        """
-        self.times = times
-        self.ins = insertion
-    
-    @staticmethod
-    def feedback(beta, T)
-        """Calculate temperature coefficient of reactivity
-        """
-        # Reactivity temperature coefficient [dk/k/K]
-        RTC = beta*(-7.3e-11*(T)**2 -7.58e-7*(T) - 1.13e-3)
-
-
-    def set_function(self, t, T):
-        """
-        """
-
-        funcdx = np.searchsorted(times, t, 'left') - 1
-        rhofunc = self.ins[funcdx]
-
-        rho_ins = rhofunc(T)
-        rho_feed = 
-
-
-    def rho(self, added_rho):
-        """Compute rho with added_rho and feedback
-        """
-
 class FuelMat:
     # Decay constant, lambda [sec^-1] (D. Hetrick, Table 1-2, p.11)
     lams = {'U235'  : np.array([0.0127, 0.0317, 0.115, 0.311, 1.40, 3.87]),
