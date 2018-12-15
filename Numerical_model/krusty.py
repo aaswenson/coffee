@@ -12,9 +12,6 @@ PRKE Finite Difference for KRUSTY KRAB REACTOR
 
 class krusty():
     
-    # Reactivity temperature coefficient [dk/k/K]
-    RTC = lambda self, T:self.matdat.beta*(-7.3e-11*(T)**2\
-                                           -7.58e-7*(T) - 1.13e-3)
 
     # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 100 < T < 1000 [C]
