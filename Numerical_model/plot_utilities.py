@@ -70,7 +70,7 @@ def filter_data(filters, data):
     
     return data
 
-def plot_results(data, ind, dep, log=None):
+def plot_results(data, ind, dep, log=None, ylim=None):
     """Generate Plots
     """
     label_strings = {'times' : 'Time [s]',
@@ -106,6 +106,8 @@ def plot_results(data, ind, dep, log=None):
         plt.yscale('log')
     if log == 'semilogx':
         plt.xscale('log')
+    if ylim:
+        plt.ylim(ylim)
 
     savename = '{0}_vs_{1}.png'.format(dep, ind)
     plt.savefig(savename, dpi=500, format='png')
@@ -120,7 +122,7 @@ if __name__=='__main__':
     dol  = ['rho / 0.00642', 'rho_insert / 0.00642', 'rho_feedback / 0.00642']
     data = unit_conv(dol, data)
     plot_results(data, 'times', 'c', 'semilogy')
-    plot_results(data, 'times', 'power')
+    plot_results(data, 'times', 'power', 'semilogy', (1,10000))
     plot_results(data, 'times', 'Tf')
     plot_results(data, 'times', 'rho')
     plot_results(data, 'times', 'rho_insert')

@@ -13,16 +13,15 @@ PRKE Finite Difference for KRUSTY KRAB REACTOR
 class krusty():
     
     rho_follow = False
-    
+    free_run = False
+
     # Reactivity temperature coefficient [dk/k/K]
-    RTC = lambda self, T: self.matdat.beta*(-7.3e-11*(T)**2 
-                                            -7.58e-7*(T) 
-                                            - 1.13e-3)
+    RTC = lambda self, T: self.matdat.beta*(-7.3e-11*T**2 - 7.58e-7*T - 1.13e-3) 
 
     # Eq.1 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 100 < T < 1000 [C]
     cp = lambda self, T: 0.137 + 5.12e-5*(T-unit['C_K'])\
-                         + 1.99e-8*(T-unit['C_K'])**2
+                         + 1.99e-8*(T-unit['C_K'])**2 
 
     # Eq.4 (INL/EXT-10-19373 Thermophysical Properties of U-10Mo Alloy)
     # Range: 20 < T < 700 [C]
@@ -40,12 +39,13 @@ class krusty():
         self.matdat = FuelMat(w_Pu)
         self.reactor()                  # set Physical parameters of system
         self.n0 = 100                   # initial neutron population
-        self.rho_func = self.rho_maintain
+        self.rho_func = self.rho_maintain_60
         self.rho_cost = 0.15            # Initial step reactivity cost [$]
         self.stop_follow = 0.60*self.matdat.beta
         # reactivity insertion
         self.rho_insert = self.rho_cost * self.matdat.beta
- 
+        print(self.matdat.beta)
+
     def reactor(self):
         self.volume = float(1940)           # Fuel volume [cc]
         # reactor fuel and coolant channels start at room temp
@@ -102,10 +102,9 @@ class krusty():
             data[ind]['power'] = data[ind]['npop']*self.matdat.n_W / dt
             data[ind]['dndt'] = dndt    
             self.rho_func(data[ind])
-            str = '{0:.4f} {1:.4e} {2:.4e} {3:.4f}'
+            str = '{0:.4f} {1:.4f} {2:.4f} {3:.4f}'
             dat = data[ind]
-            print(str.format(t, dat['npop'], dat['rho'], dat['rho_feedback']))
-            
+            print(str.format(dat['power'], dat['Tf'], dat['rho_insert'], dat['rho_feedback']))
 
         pu.save_results(data)
          
@@ -140,11 +139,11 @@ class krusty():
         C = self.cp(T) * self.mass
 
         # adiabatic heating
-        if T <= 373.15:
+        if T <= 623.15:
             Q_out = 0
         else:
-            Q_out = 3000
-
+            Q_out = 300
+        
         dTdt = (p - Q_out) / C
         
         return dTdt
@@ -174,7 +173,25 @@ class krusty():
         
         data['rho_insert'] = self.rho_insert
         data['rho'] = data['rho_insert'] + data['rho_feedback']
+    
+    def rho_maintain_60(self, data):
+        """Calculate reactivity response to temperature.
+        """
+        T = data['Tf']
+        data['rho_feedback'] = self.RTC(T)*(T-self.T_ref_rho)
         
+        if (self.rho_insert < -data['rho_feedback']):
+            self.rho_follow = True
+
+        if self.rho_insert > self.stop_follow:
+            self.free_run = True
+        
+        if (self.rho_follow == True) and (self.free_run == False):
+            self.rho_insert = -data['rho_feedback']
+        
+        data['rho_insert'] = self.rho_insert
+        data['rho'] = data['rho_insert'] + data['rho_feedback']
+    
 def main():
     start = time.time()
     kilo = krusty(1)
