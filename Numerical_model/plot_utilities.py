@@ -116,7 +116,7 @@ def plot_results(data, ind, dep, log=None):
 if __name__=='__main__':
     data = load_from_csv()
     data = unit_conv(['times / 60'], data)
-    data = filter_data(['times < 30'], data) 
+#    data = filter_data(['times < 30'], data) 
     dol  = ['rho / 0.00642', 'rho_insert / 0.00642', 'rho_feedback / 0.00642']
     data = unit_conv(dol, data)
     plot_results(data, 'times', 'c', 'semilogy')

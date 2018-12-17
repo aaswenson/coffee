@@ -40,9 +40,9 @@ class krusty():
         self.matdat = FuelMat(w_Pu)
         self.reactor()                  # set Physical parameters of system
         self.n0 = 100                   # initial neutron population
-        self.rho_func = self.rho_free
+        self.rho_func = self.rho_maintain
         self.rho_cost = 0.15            # Initial step reactivity cost [$]
-        self.stop_follow = 0.30*self.matdat.beta
+        self.stop_follow = 0.60*self.matdat.beta
         # reactivity insertion
         self.rho_insert = self.rho_cost * self.matdat.beta
  
@@ -65,8 +65,8 @@ class krusty():
 
     def RungeKutta4(self):        
         
-        times = [2000]
-        dts   = [0.001]
+        times = [18000]
+        dts   = [0.005]
         tsec = []
         t0 = 0
         for t, dt in zip(times, dts):
@@ -143,7 +143,7 @@ class krusty():
         if T <= 373.15:
             Q_out = 0
         else:
-            Q_out = 0 #3000
+            Q_out = 3000
 
         dTdt = (p - Q_out) / C
         
